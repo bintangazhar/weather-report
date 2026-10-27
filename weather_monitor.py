@@ -9,6 +9,7 @@ import sys
 import logging
 from datetime import datetime, timedelta, UTC
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 import requests
 from dotenv import load_dotenv
@@ -95,12 +96,13 @@ class WeatherMonitor:
 
     def check_rain_risk_openweather(self, data: dict) -> list[dict]:
         """Parse OpenWeatherMap response for rain risk in next 3 hours."""
-        now = datetime.now(UTC)
+        wib = ZoneInfo(self.timezone)
+        now = datetime.now(wib)
         cutoff = now + timedelta(hours=3)
         alerts = []
 
         for entry in data.get("list", []):
-            dt = datetime.fromtimestamp(entry["dt"], UTC)
+            dt = datetime.fromtimestamp(entry["dt"], UTC).astimezone(wib)
             if now <= dt <= cutoff:
                 pop = entry.get("pop", 0)
                 if pop >= self.rain_threshold:
@@ -120,7 +122,8 @@ class WeatherMonitor:
 
     def check_rain_risk_open_meteo(self, data: dict) -> list[dict]:
         """Parse Open-Meteo response for rain risk in next 3 hours."""
-        now = datetime.now()
+        wib = ZoneInfo(self.timezone)
+        now = datetime.now(wib)
         cutoff = now + timedelta(hours=3)
         alerts = []
 
@@ -133,7 +136,7 @@ class WeatherMonitor:
         humidity = hourly.get("relativehumidity_2m", [])
 
         for i, t_str in enumerate(times):
-            dt = datetime.fromisoformat(t_str)
+            dt = datetime.fromisoformat(t_str).replace(tzinfo=wib)
             if now <= dt <= cutoff:
                 pop = pops[i] / 100.0 if pops[i] is not None else 0
                 if pop >= self.rain_threshold:
@@ -210,9 +213,11 @@ class WeatherMonitor:
         return codes.get(code, f"Kode {code}")
 
     def format_alert(self, alerts: list[dict], source: str) -> str:
+        wib = ZoneInfo(self.timezone)
+        now_wib = datetime.now(wib)
         lines = [
             f"🌧️ *PERINGATAN HUJAN - PONTIANAK*",
-            f"⏰ Cek: {datetime.now().strftime('%d/%m/%Y %H:%M')} WIB",
+            f"⏰ Cek: {now_wib.strftime('%d/%m/%Y %H:%M')} WIB",
             f"📡 Sumber: {source}",
             "",
         ]
