@@ -102,7 +102,9 @@ class WeatherMonitor:
         alerts = []
 
         for entry in data.get("list", []):
-            dt = datetime.fromtimestamp(entry["dt"], UTC).astimezone(wib)
+            dt_utc = datetime.fromtimestamp(entry["dt"], UTC)
+            dt = dt_utc.astimezone(wib)
+            logger.debug(f"OWM entry: dt_utc={dt_utc.isoformat()}, dt_wib={dt.isoformat()}, pop={entry.get('pop', 0)}")
             if now <= dt <= cutoff:
                 pop = entry.get("pop", 0)
                 if pop >= self.rain_threshold:
@@ -136,7 +138,12 @@ class WeatherMonitor:
         humidity = hourly.get("relativehumidity_2m", [])
 
         for i, t_str in enumerate(times):
-            dt = datetime.fromisoformat(t_str).replace(tzinfo=wib)
+            dt = datetime.fromisoformat(t_str)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=wib)
+            else:
+                dt = dt.astimezone(wib)
+            logger.debug(f"OM entry: t_str={t_str}, dt_wib={dt.isoformat()}, pop={pops[i] if i < len(pops) else 'N/A'}")
             if now <= dt <= cutoff:
                 pop = pops[i] / 100.0 if pops[i] is not None else 0
                 if pop >= self.rain_threshold:
@@ -154,14 +161,16 @@ class WeatherMonitor:
 
     def check_rain_risk_wttr(self, data: dict) -> list[dict]:
         """Parse wttr.in response for rain risk in next 3 hours."""
-        now = datetime.now()
+        wib = ZoneInfo(self.timezone)
+        now = datetime.now(wib)
         cutoff = now + timedelta(hours=3)
         alerts = []
 
         for day in data.get("weather", []):
             for hour in day.get("hourly", []):
                 dt_str = f"{day['date']} {hour['time'].zfill(4)}"
-                dt = datetime.strptime(dt_str, "%Y-%m-%d %H%M")
+                dt = datetime.strptime(dt_str, "%Y-%m-%d %H%M").replace(tzinfo=wib)
+                logger.debug(f"wttr entry: dt_str={dt_str}, dt_wib={dt.isoformat()}, pop={hour.get('chanceofrain', 0)}")
                 if now <= dt <= cutoff:
                     pop = int(hour.get("chanceofrain", 0)) / 100.0
                     if pop >= self.rain_threshold:
@@ -215,9 +224,11 @@ class WeatherMonitor:
     def format_alert(self, alerts: list[dict], source: str) -> str:
         wib = ZoneInfo(self.timezone)
         now_wib = datetime.now(wib)
+        window_end = now_wib + timedelta(hours=3)
         lines = [
             f"🌧️ *PERINGATAN HUJAN - PONTIANAK*",
             f"⏰ Cek: {now_wib.strftime('%d/%m/%Y %H:%M')} WIB",
+            f"📅 Perkiraan: {now_wib.strftime('%H:%M')}-{window_end.strftime('%H:%M')} WIB (3 jam ke depan)",
             f"📡 Sumber: {source}",
             "",
         ]
@@ -227,7 +238,8 @@ class WeatherMonitor:
                 f"\n  🌡️ {a['temp']:.1f}°C | 💧 {a['humidity']}% | 🌧️ {a['rain_volume']:.1f}mm"
                 f"\n  📝 {a['description']}"
             )
-        lines.append("\n⚠️ Bawa payung/jas hujan!")
+        lines.append("\n⚠️ *Catatan: Prediksi cuaca bisa berubah. Cek berkala untuk update terbaru.*")
+        lines.append("☔ Bawa payung/jas hujan!")
         return "\n".join(lines)
 
     def send_telegram(self, message: str) -> bool:
@@ -247,6 +259,11 @@ class WeatherMonitor:
             return False
 
     def run(self) -> bool:
+        wib = ZoneInfo(self.timezone)
+        now = datetime.now(wib)
+        cutoff = now + timedelta(hours=3)
+        logger.info(f"Checking rain risk: now={now.isoformat()}, window={now.strftime('%H:%M')}-{cutoff.strftime('%H:%M')} WIB")
+
         # Try OpenWeatherMap first (primary)
         data = self.fetch_weather_openweather()
         source = "OpenWeatherMap"
@@ -274,6 +291,9 @@ class WeatherMonitor:
 
         if alerts:
             msg = self.format_alert(alerts, source)
+            logger.info(f"Alert triggered: {len(alerts)} entries in window {now.strftime('%H:%M')}-{cutoff.strftime('%H:%M')} WIB")
+            for a in alerts:
+                logger.info(f"  Forecast: {a['time']} WIB pop={int(a['pop']*100)}% {a['description']}")
             return self.send_telegram(msg)
         else:
             logger.info(f"No high rain risk in next 3 hours (source: {source})")
