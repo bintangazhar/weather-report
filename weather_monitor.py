@@ -2,10 +2,12 @@
 """
 Weather monitor for Pontianak - Primary: OpenWeatherMap, Fallback: Open-Meteo, wttr.in
 Runs once per cron job, sends Telegram alert if rain probability is high in next 3 hours.
+Deduplicates alerts by tracking notified forecast hours.
 """
 
 import os
 import sys
+import json
 import logging
 from datetime import datetime, timedelta, UTC
 from typing import Optional
@@ -26,6 +28,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+STATE_FILE = "notified_hours.json"
+
 
 class WeatherMonitor:
     def __init__(self):
@@ -40,6 +44,35 @@ class WeatherMonitor:
 
         if not all([self.telegram_token, self.telegram_chat_id]):
             raise ValueError("Missing Telegram environment variables")
+
+    def _load_notified_hours(self) -> set[str]:
+        """Load set of already-notified forecast hours (format: YYYY-MM-DDTHH:00)."""
+        if not os.path.exists(STATE_FILE):
+            return set()
+        try:
+            with open(STATE_FILE, "r") as f:
+                data = json.load(f)
+            # Cleanup entries older than 24 hours
+            wib = ZoneInfo(self.timezone)
+            now = datetime.now(wib)
+            cutoff = now - timedelta(hours=24)
+            valid = {h for h in data if datetime.fromisoformat(h) >= cutoff}
+            return valid
+        except (json.JSONDecodeError, OSError, ValueError):
+            logger.warning("Failed to load state file, starting fresh")
+            return set()
+
+    def _save_notified_hours(self, hours: set[str]) -> None:
+        """Save set of notified forecast hours."""
+        try:
+            with open(STATE_FILE, "w") as f:
+                json.dump(sorted(hours), f)
+        except OSError as e:
+            logger.error(f"Failed to save state file: {e}")
+
+    def _get_forecast_hour_key(self, dt: datetime) -> str:
+        """Get hour key for a forecast datetime (YYYY-MM-DDTHH:00)."""
+        return dt.replace(minute=0, second=0, microsecond=0).isoformat()
 
     def fetch_weather_openweather(self) -> Optional[dict]:
         """Fetch from OpenWeatherMap - requires API key, most detailed."""
@@ -264,6 +297,9 @@ class WeatherMonitor:
         cutoff = now + timedelta(hours=3)
         logger.info(f"Checking rain risk: now={now.isoformat()}, window={now.strftime('%H:%M')}-{cutoff.strftime('%H:%M')} WIB")
 
+        # Load already-notified hours
+        notified_hours = self._load_notified_hours()
+
         # Try OpenWeatherMap first (primary)
         data = self.fetch_weather_openweather()
         source = "OpenWeatherMap"
@@ -289,14 +325,40 @@ class WeatherMonitor:
 
         alerts = parser(data)
 
-        if alerts:
-            msg = self.format_alert(alerts, source)
-            logger.info(f"Alert triggered: {len(alerts)} entries in window {now.strftime('%H:%M')}-{cutoff.strftime('%H:%M')} WIB")
-            for a in alerts:
+        # Filter out already-notified hours
+        new_alerts = []
+        newly_notified_hours = set()
+        for a in alerts:
+            # Parse the forecast time back to datetime to get hour key
+            forecast_dt = now.replace(
+                hour=int(a["time"].split(":")[0]),
+                minute=int(a["time"].split(":")[1]),
+                second=0,
+                microsecond=0,
+            )
+            # Handle day rollover (if forecast is past midnight)
+            if forecast_dt < now:
+                forecast_dt += timedelta(days=1)
+            hour_key = self._get_forecast_hour_key(forecast_dt)
+            if hour_key not in notified_hours:
+                new_alerts.append(a)
+                newly_notified_hours.add(hour_key)
+            else:
+                logger.info(f"Skipping already-notified hour: {hour_key}")
+
+        if new_alerts:
+            msg = self.format_alert(new_alerts, source)
+            logger.info(f"Alert triggered: {len(new_alerts)} new entries in window {now.strftime('%H:%M')}-{cutoff.strftime('%H:%M')} WIB")
+            for a in new_alerts:
                 logger.info(f"  Forecast: {a['time']} WIB pop={int(a['pop']*100)}% {a['description']}")
-            return self.send_telegram(msg)
+            success = self.send_telegram(msg)
+            if success:
+                # Update state with newly notified hours
+                notified_hours.update(newly_notified_hours)
+                self._save_notified_hours(notified_hours)
+            return success
         else:
-            logger.info(f"No high rain risk in next 3 hours (source: {source})")
+            logger.info(f"No new high rain risk in next 3 hours (source: {source})")
             return True
 
 
