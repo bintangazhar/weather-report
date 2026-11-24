@@ -34,3 +34,7 @@ build/
 .dev.vars
 node_modules/
 .wrangler/
+
+# Local state & agent notes
+notified_hours.json
+.agents/
