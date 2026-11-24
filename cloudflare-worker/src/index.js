@@ -54,6 +54,8 @@ class WeatherMonitor {
     this.rainThreshold = parseFloat(env.RAIN_THRESHOLD || "0.5");
     // Minimum expected rain, in mm per 3 hours, for an alert to fire.
     this.minRainMm3h = parseFloat(env.MIN_RAIN_MM ?? "1.0");
+    // Open-Meteo must give at least this probability for an OpenWeatherMap alert to be sent.
+    this.crossCheckPop = parseFloat(env.CROSSCHECK_MIN_POP ?? "0.5");
     this.stateKey = "notified_hours";
     this.kv = env.WEATHER_STATE; // KV namespace binding (optional)
 
@@ -270,6 +272,48 @@ class WeatherMonitor {
   }
 
   // Scale the per-3h minimum to the source's slot length (OWM/wttr: 3h, Open-Meteo: 1h).
+  // OpenWeatherMap's pop saturates at 1 for Pontianak; avoid showing "100%" as certainty.
+  _formatPop(pop) {
+    if (pop >= 0.95) return "Sangat mungkin (≥95%)";
+    return `${Math.round(pop * 100)}%`;
+  }
+
+  // OWM rain.3h covers the 3 hours ending at dt; Open-Meteo hourly values cover the
+  // preceding hour, so the matching hours are (dt-3h, dt].
+  async _crossCheckOpenMeteo(alerts) {
+    const om = await this.fetchWeatherOpenMeteo();
+    if (!om) {
+      console.warn("Cross-check unavailable: Open-Meteo fetch failed, keeping OWM alerts");
+      return alerts.map((a) => ({ ...a, crossCheck: null }));
+    }
+    const h = om.data.hourly || {};
+    const times = (h.time || []).map((t) => new Date(t + "+07:00").getTime());
+    const kept = [];
+    for (const a of alerts) {
+      const end = new Date(a.isoTime).getTime();
+      const start = end - 3 * 60 * 60 * 1000;
+      let maxPop = 0;
+      let mm = 0;
+      let n = 0;
+      times.forEach((t, i) => {
+        if (t > start && t <= end) {
+          maxPop = Math.max(maxPop, (h.precipitation_probability?.[i] || 0) / 100);
+          mm += h.precipitation?.[i] || 0;
+          n++;
+        }
+      });
+      if (n === 0) {
+        console.warn(`Cross-check: no Open-Meteo hours for ${a.time}, keeping alert`);
+        kept.push({ ...a, crossCheck: null });
+      } else if (maxPop >= this.crossCheckPop) {
+        kept.push({ ...a, crossCheck: { pop: maxPop, mm } });
+      } else {
+        console.log(`Cross-check: drop ${a.time} WIB (Open-Meteo pop=${Math.round(maxPop * 100)}% rain=${mm.toFixed(2)}mm)`);
+      }
+    }
+    return kept;
+  }
+
   _meetsRainVolume(mm, hours) {
     return mm >= (this.minRainMm3h * hours) / 3;
   }
@@ -316,11 +360,16 @@ class WeatherMonitor {
     alerts.forEach((a, i) => {
       if (i > 0) lines.push("---");
       lines.push(
-        `• ${a.time} WIB - Kemungkinan: ${Math.round(a.pop * 100)}%`,
+        `• ${a.time} WIB - Peluang: ${this._formatPop(a.pop)}`,
         `  🌧️ ${a.rainVolume.toFixed(2)} mm/${a.rainHours} jam (~${(a.rainVolume / a.rainHours).toFixed(2)} mm/jam) - Intensitas: ${this._rainIntensity(a.rainVolume, a.rainHours)}`,
         `  🌡️ ${a.temp.toFixed(1)}°C | 💧 ${a.humidity}%`,
         `  📝 ${a.description}`
       );
+      if (a.crossCheck) {
+        lines.push(`  🔁 Open-Meteo: ${Math.round(a.crossCheck.pop * 100)}% | ${a.crossCheck.mm.toFixed(2)} mm/3 jam`);
+      } else if (a.crossCheck === null) {
+        lines.push("  🔁 Cek silang Open-Meteo tidak tersedia");
+      }
     });
     lines.push("", "⚠️ *Catatan: Prediksi cuaca bisa berubah. Cek berkala untuk update terbaru.*", "☔ Bawa payung/jas hujan!");
     return lines.join("\n");
@@ -375,7 +424,10 @@ class WeatherMonitor {
       return false;
     }
 
-    const { alerts } = parser(result);
+    let { alerts } = parser(result);
+    if (result.source === "OpenWeatherMap" && alerts.length > 0) {
+      alerts = await this._crossCheckOpenMeteo(alerts);
+    }
 
     // Filter out already-notified hours
     const newAlerts = [];

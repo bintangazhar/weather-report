@@ -41,6 +41,7 @@ wrangler secret put OPENWEATHER_API_KEY
 | `OPENWEATHER_API_KEY` | No | OpenWeatherMap API key (primary source) |
 | `RAIN_THRESHOLD` | No | Rain probability threshold 0-1 (default: 0.5) |
 | `MIN_RAIN_MM` | No | Minimum expected rain in mm per 3 hours to alert (default: 1.0; scaled for hourly sources) |
+| `CROSSCHECK_MIN_POP` | No | When OpenWeatherMap is the source, Open-Meteo must forecast at least this probability (0-1) in the same 3h window, or the alert is dropped (default: 0.5) |
 | `LATITUDE` | No | Location latitude (default: -0.03194) |
 | `LONGITUDE` | No | Location longitude (default: 109.325) |
 | `TIMEZONE` | No | IANA timezone (default: Asia/Pontianak) |

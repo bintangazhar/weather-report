@@ -11,6 +11,7 @@ LONGITUDE = 109.325
 TIMEZONE = "Asia/Pontianak"
 RAIN_THRESHOLD = 0.75
 MIN_RAIN_MM = 1.0 # minimal curah hujan (mm per 3 jam) agar alert dikirim
+CROSSCHECK_MIN_POP = 0.5 # peluang minimal dari Open-Meteo agar alert OpenWeatherMap dikirim
 
 # Untuk KV storage state (opsional, jalankan `npx wrangler kv namespace create WEATHER_STATE` dan pasang ID-nya di sini)
 [[kv_namespaces]]
