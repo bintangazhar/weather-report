@@ -317,7 +317,7 @@ class WeatherMonitor {
       if (i > 0) lines.push("---");
       lines.push(
         `• ${a.time} WIB - Kemungkinan: ${Math.round(a.pop * 100)}%`,
-        `  🌧️ ${a.rainVolume.toFixed(1)} mm/${a.rainHours} jam (~${(a.rainVolume / a.rainHours).toFixed(1)} mm/jam) - Intensitas: ${this._rainIntensity(a.rainVolume, a.rainHours)}`,
+        `  🌧️ ${a.rainVolume.toFixed(2)} mm/${a.rainHours} jam (~${(a.rainVolume / a.rainHours).toFixed(2)} mm/jam) - Intensitas: ${this._rainIntensity(a.rainVolume, a.rainHours)}`,
         `  🌡️ ${a.temp.toFixed(1)}°C | 💧 ${a.humidity}%`,
         `  📝 ${a.description}`
       );
