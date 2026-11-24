@@ -313,14 +313,15 @@ class WeatherMonitor {
       "",
     ];
 
-    for (const a of alerts) {
+    alerts.forEach((a, i) => {
+      if (i > 0) lines.push("---");
       lines.push(
         `• ${a.time} WIB - Kemungkinan: ${Math.round(a.pop * 100)}%`,
         `  🌧️ ${a.rainVolume.toFixed(1)} mm/${a.rainHours} jam (~${(a.rainVolume / a.rainHours).toFixed(1)} mm/jam) - Intensitas: ${this._rainIntensity(a.rainVolume, a.rainHours)}`,
         `  🌡️ ${a.temp.toFixed(1)}°C | 💧 ${a.humidity}%`,
         `  📝 ${a.description}`
       );
-    }
+    });
     lines.push("", "⚠️ *Catatan: Prediksi cuaca bisa berubah. Cek berkala untuk update terbaru.*", "☔ Bawa payung/jas hujan!");
     return lines.join("\n");
   }
