@@ -10,15 +10,15 @@
 | T-02 | Add rate limiting on /run endpoint | Implement KV-based rate limit (10 req/min per IP) | Medium | Done | - | src/index.js |
 | T-03 | RAIN_THRESHOLD as var | Keep in [vars] (not secret) for easy tweaking | Low | Done | - | wrangler.toml, .dev.vars.example |
 | T-04 | Test all fixes locally | Verify timeout, rate limit, and auth work in wrangler dev | High | Done | T-01, T-02, T-03 | - |
-| T-05 | Deploy to production | Deploy with secrets and verify | High | Blocked | T-04 | - |
+| T-05 | Deploy to production | Deploy with secrets and verify | High | Done | T-04 | - |
 
 ## Summary
 - **Total tasks:** 5
-- **Done:** 4
-- **Blocked:** 1 (deploy permission issue)
+- **Done:** 5
+- **Blocked:** 0
 
 ## Notes
 - All fixes implemented and tested locally
 - RAIN_THRESHOLD kept as var (easier to tweak, no security impact)
-- Deploy blocked by API token permission (needs Workers Scripts:Edit)
-- Fix: `unset CLOUDFLARE_API_TOKEN && wrangler login` then deploy
+- Deploy was blocked by API token permission (needs Workers Scripts:Edit); fixed via `wrangler login`
+- 2026-11-24: deployed to production and verified (`/run` returns 200, secrets set)
