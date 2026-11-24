@@ -1,0 +1,18 @@
+name = "weather-pontianak"
+main = "src/index.js"
+compatibility_date = "2026-11-03"
+
+[triggers]
+crons = ["0 * * * *"] # Setiap jam sekali
+
+[vars]
+LATITUDE = -0.03194
+LONGITUDE = 109.325
+TIMEZONE = "Asia/Pontianak"
+RAIN_THRESHOLD = 0.75
+MIN_RAIN_MM = 1.0 # minimal curah hujan (mm per 3 jam) agar alert dikirim
+
+# Untuk KV storage state (opsional, jalankan `npx wrangler kv namespace create WEATHER_STATE` dan pasang ID-nya di sini)
+[[kv_namespaces]]
+binding = "WEATHER_STATE"
+id = "deaeca5c0954486a839ea122d2ec26b4"

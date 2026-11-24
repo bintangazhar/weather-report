@@ -1,0 +1,11 @@
+# Copy this to .dev.vars and fill in your values
+# For production, set these as secrets: npx wrangler secret put TELEGRAM_BOT_TOKEN
+
+OPENWEATHER_API_KEY="your_openweathermap_api_key"
+TELEGRAM_BOT_TOKEN="your_telegram_bot_token"
+TELEGRAM_CHAT_ID="your_telegram_chat_id"
+CRON_SECRET="your_random_secret_here"
+RAIN_THRESHOLD=0.75
+# LATITUDE=-0.03194
+# LONGITUDE=109.325
+# TIMEZONE=Asia/Pontianak

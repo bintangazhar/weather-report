@@ -30,3 +30,7 @@ Thumbs.db
 *.egg-info/
 dist/
 build/
+# Cloudflare Worker
+.dev.vars
+node_modules/
+.wrangler/
