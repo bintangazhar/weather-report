@@ -358,7 +358,7 @@ class WeatherMonitor {
     ];
 
     alerts.forEach((a, i) => {
-      if (i > 0) lines.push("---");
+      if (i > 0) lines.push("────────────────────");
       lines.push(
         `• ${a.time} WIB - Peluang: ${this._formatPop(a.pop)}`,
         `  🌧️ ${a.rainVolume.toFixed(2)} mm/${a.rainHours} jam (~${(a.rainVolume / a.rainHours).toFixed(2)} mm/jam) - Intensitas: ${this._rainIntensity(a.rainVolume, a.rainHours)}`,
